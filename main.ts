@@ -25,176 +25,183 @@ const authors = db.collection<AuthorSchema>("authors");
 const docs = db.collection<DocSchema>("docs");
 const docSections = db.collection<DocSectionSchema>("doc-sections");
 
-const idIndex = { name: "id", unique: true, key: { id: 1 } };
-const authorIndex = { name: "author", key: { author: 1 } };
-const authorsIndex = { name: "authors", key: { authors: 1 } };
+const parseFiles = async (dryRun: boolean) => {
+  if (!dryRun) {
+    const idIndex = { name: "id", unique: true, key: { id: 1 } };
+    const authorIndex = { name: "author", key: { author: 1 } };
+    const authorsIndex = { name: "authors", key: { authors: 1 } };
 
-await posts.createIndexes({
-  indexes: [idIndex, authorIndex],
-});
-await authors.createIndexes({
-  indexes: [idIndex],
-});
-await docs.createIndexes({
-  indexes: [idIndex, authorsIndex],
-});
-await docSections.createIndexes({
-  indexes: [
-    {
-      name: "id",
-      unique: true,
-      key: { documentationId: 1, sectionId: 1, subSectionId: 1 },
-    },
-  ],
-});
-
-const postsData = JSON.parse(
-  await Deno.readTextFile("./blog/posts/_metadata.json")
-);
-
-const authorsData = JSON.parse(
-  await Deno.readTextFile("./blog/posts/_authors.json")
-);
-
-const docsData = JSON.parse(await Deno.readTextFile("./docs/_docs.json"));
-
-const currDateTime = new Date();
-
-console.log(`\n======= Processing Posts =======`);
-for (const id of Object.getOwnPropertyNames(postsData)) {
-  const newRecord: PostSchema = {
-    id,
-    title: postsData[id].title,
-    markdown: await Deno.readTextFile(`./blog/posts/${id}.md`),
-    description: postsData[id].description,
-    thumbnail: postsData[id].thumbnail,
-    author: postsData[id].author,
-    tags: [],
-    hidden: false,
-    date: new Date(postsData[id].date),
-    updatedOn: currDateTime,
-    syncedOn: currDateTime,
-  };
-
-  const filter = {
-    id: newRecord.id,
-  };
-
-  const existingRecord = await posts.findOne(filter);
-
-  if (existingRecord) {
-    delete existingRecord._id;
-    const originalUpdatedOnDate = existingRecord.updatedOn;
-    existingRecord.updatedOn = newRecord.updatedOn;
-    existingRecord.syncedOn = newRecord.syncedOn;
-    if (!isDeepStrictEqual(newRecord, existingRecord)) {
-      console.log(`Updating`, filter);
-      await posts.replaceOne(filter, newRecord);
-    } else {
-      console.log(`Ignoring`, filter);
-      existingRecord.updatedOn = originalUpdatedOnDate;
-      await posts.replaceOne(filter, existingRecord);
-    }
-  } else {
-    console.log(`Creating`, filter);
-    await posts.insertOne(newRecord);
+    await posts.createIndexes({
+      indexes: [idIndex, authorIndex],
+    });
+    await authors.createIndexes({
+      indexes: [idIndex],
+    });
+    await docs.createIndexes({
+      indexes: [idIndex, authorsIndex],
+    });
+    await docSections.createIndexes({
+      indexes: [
+        {
+          name: "id",
+          unique: true,
+          key: { documentationId: 1, sectionId: 1, subSectionId: 1 },
+        },
+      ],
+    });
   }
-}
 
-console.log(`\n======= Processing Authors =======`);
-for (const id of Object.getOwnPropertyNames(authorsData)) {
-  const newRecord: AuthorSchema = {
-    id,
-    description: authorsData[id].description,
-    youtube: authorsData[id].youtube,
-    thumbnail: authorsData[id].thumbnail,
-    updatedOn: currDateTime,
-    syncedOn: currDateTime,
-  };
+  const postsData = JSON.parse(
+    await Deno.readTextFile("./blog/posts/_metadata.json")
+  );
 
-  const filter = {
-    id: newRecord.id,
-  };
+  const authorsData = JSON.parse(
+    await Deno.readTextFile("./blog/posts/_authors.json")
+  );
 
-  const existingRecord = await authors.findOne(filter);
+  const docsData = JSON.parse(await Deno.readTextFile("./docs/_docs.json"));
 
-  if (existingRecord) {
-    delete existingRecord._id;
-    const originalUpdatedOnDate = existingRecord.updatedOn;
-    existingRecord.updatedOn = newRecord.updatedOn;
-    existingRecord.syncedOn = newRecord.syncedOn;
-    if (!isDeepStrictEqual(newRecord, existingRecord)) {
-      console.log(`Updating`, filter);
-      await authors.replaceOne(filter, newRecord);
-    } else {
-      existingRecord.updatedOn = originalUpdatedOnDate;
-      console.log(`Ignoring`, filter);
-      await authors.replaceOne(filter, existingRecord);
+  const currDateTime = new Date();
+
+  console.log(`\n======= Processing Posts =======`);
+  for (const id of Object.getOwnPropertyNames(postsData)) {
+    const newRecord: PostSchema = {
+      id,
+      title: postsData[id].title,
+      markdown: await Deno.readTextFile(`./blog/posts/${id}.md`),
+      description: postsData[id].description,
+      thumbnail: postsData[id].thumbnail,
+      author: postsData[id].author,
+      tags: [],
+      hidden: false,
+      date: new Date(postsData[id].date),
+      updatedOn: currDateTime,
+      syncedOn: currDateTime,
+    };
+
+    if (!dryRun) {
+      const filter = {
+        id: newRecord.id,
+      };
+
+      const existingRecord = await posts.findOne(filter);
+
+      if (existingRecord) {
+        delete existingRecord._id;
+        const originalUpdatedOnDate = existingRecord.updatedOn;
+        existingRecord.updatedOn = newRecord.updatedOn;
+        existingRecord.syncedOn = newRecord.syncedOn;
+        if (!isDeepStrictEqual(newRecord, existingRecord)) {
+          console.log(`Updating`, filter);
+          await posts.replaceOne(filter, newRecord);
+        } else {
+          console.log(`Ignoring`, filter);
+          existingRecord.updatedOn = originalUpdatedOnDate;
+          await posts.replaceOne(filter, existingRecord);
+        }
+      } else {
+        console.log(`Creating`, filter);
+        await posts.insertOne(newRecord);
+      }
     }
-  } else {
-    console.log(`Creating`, filter);
-    await authors.insertOne(newRecord);
   }
-}
 
-console.log(`\n======= Processing Docs =======`);
-for (const id of Object.getOwnPropertyNames(docsData)) {
-  const newRecord: DocSchema = {
-    id,
-    ...docsData[id],
-    hidden: false,
-    updatedOn: currDateTime,
-    syncedOn: currDateTime,
-  };
+  console.log(`\n======= Processing Authors =======`);
+  for (const id of Object.getOwnPropertyNames(authorsData)) {
+    const newRecord: AuthorSchema = {
+      id,
+      description: authorsData[id].description,
+      youtube: authorsData[id].youtube,
+      thumbnail: authorsData[id].thumbnail,
+      updatedOn: currDateTime,
+      syncedOn: currDateTime,
+    };
 
-  const filter = {
-    id: newRecord.id,
-  };
+    if (!dryRun) {
+      const filter = {
+        id: newRecord.id,
+      };
 
-  const existingRecord = await docs.findOne(filter);
+      const existingRecord = await authors.findOne(filter);
 
-  if (existingRecord) {
-    delete existingRecord._id;
-    const originalUpdatedOnDate = existingRecord.updatedOn;
-    existingRecord.updatedOn = newRecord.updatedOn;
-    existingRecord.syncedOn = newRecord.syncedOn;
-    if (!isDeepStrictEqual(newRecord, existingRecord)) {
-      console.log(`Updating`, filter);
-      await docs.replaceOne(filter, newRecord);
-    } else {
-      existingRecord.updatedOn = originalUpdatedOnDate;
-      console.log(`Ignoring`, filter);
-      await docs.replaceOne(filter, existingRecord);
+      if (existingRecord) {
+        delete existingRecord._id;
+        const originalUpdatedOnDate = existingRecord.updatedOn;
+        existingRecord.updatedOn = newRecord.updatedOn;
+        existingRecord.syncedOn = newRecord.syncedOn;
+        if (!isDeepStrictEqual(newRecord, existingRecord)) {
+          console.log(`Updating`, filter);
+          await authors.replaceOne(filter, newRecord);
+        } else {
+          existingRecord.updatedOn = originalUpdatedOnDate;
+          console.log(`Ignoring`, filter);
+          await authors.replaceOne(filter, existingRecord);
+        }
+      } else {
+        console.log(`Creating`, filter);
+        await authors.insertOne(newRecord);
+      }
     }
-  } else {
-    console.log(`Creating`, filter);
-    await docs.insertOne(newRecord);
   }
-}
 
-console.log(`\n======= Processing Doc Sections =======`);
-for await (const doc of Deno.readDir("docs")) {
-  if (doc.isDirectory) {
-    for await (const section of Deno.readDir(join("docs", doc.name))) {
-      if (section.isDirectory) {
-        for await (const subSection of Deno.readDir(
-          join("docs", doc.name, section.name)
+  console.log(`\n======= Processing Docs =======`);
+  for (const id of Object.getOwnPropertyNames(docsData)) {
+    const newRecord: DocSchema = {
+      id,
+      ...docsData[id],
+      hidden: false,
+      updatedOn: currDateTime,
+      syncedOn: currDateTime,
+    };
+
+    if (!dryRun) {
+      const filter = {
+        id: newRecord.id,
+      };
+
+      const existingRecord = await docs.findOne(filter);
+
+      if (existingRecord) {
+        delete existingRecord._id;
+        const originalUpdatedOnDate = existingRecord.updatedOn;
+        existingRecord.updatedOn = newRecord.updatedOn;
+        existingRecord.syncedOn = newRecord.syncedOn;
+        if (!isDeepStrictEqual(newRecord, existingRecord)) {
+          console.log(`Updating`, filter);
+          await docs.replaceOne(filter, newRecord);
+        } else {
+          existingRecord.updatedOn = originalUpdatedOnDate;
+          console.log(`Ignoring`, filter);
+          await docs.replaceOne(filter, existingRecord);
+        }
+      } else {
+        console.log(`Creating`, filter);
+        await docs.insertOne(newRecord);
+      }
+    }
+
+    for (const documentationId of Object.keys(docsData)) {
+      for (const sectionId of Object.keys(docsData[documentationId].sections)) {
+        for (const subSectionId of Object.keys(
+          docsData[documentationId].sections[sectionId].subSections
         )) {
-          if (subSection.isFile) {
-            const path = join("docs", doc.name, section.name, subSection.name);
-            const documentationId = doc.name;
-            const sectionId = section.name;
-            const subSectionId = basename(subSection.name, ".md");
+          const path = join(
+            "docs",
+            documentationId,
+            sectionId,
+            `${subSectionId}.md`
+          );
 
-            const newRecord: DocSectionSchema = {
-              documentationId,
-              sectionId,
-              subSectionId,
-              markdown: await Deno.readTextFile(join(path)),
-              updatedOn: currDateTime,
-              syncedOn: currDateTime,
-            };
+          const newRecord: DocSectionSchema = {
+            documentationId,
+            sectionId,
+            subSectionId,
+            markdown: await Deno.readTextFile(join(path)),
+            updatedOn: currDateTime,
+            syncedOn: currDateTime,
+          };
 
+          if (!dryRun) {
             const filter = {
               documentationId: newRecord.documentationId,
               sectionId: newRecord.sectionId,
@@ -225,13 +232,20 @@ for await (const doc of Deno.readDir("docs")) {
       }
     }
   }
-}
 
-console.log(`\n======= Deleting anything applicable =======`);
-const deleteFilter = { syncedOn: { $ne: currDateTime } };
-const logDeleteCount = (type: string) => (num: number) =>
-  console.log(`Deleted ${num} ${type}`);
-await posts.deleteMany(deleteFilter).then(logDeleteCount("posts"));
-await authors.deleteMany(deleteFilter).then(logDeleteCount("authors"));
-await docs.deleteMany(deleteFilter).then(logDeleteCount("docs"));
-await docSections.deleteMany(deleteFilter).then(logDeleteCount("doc sections"));
+  if (!dryRun) {
+    console.log(`\n======= Deleting anything applicable =======`);
+    const deleteFilter = { syncedOn: { $ne: currDateTime } };
+    const logDeleteCount = (type: string) => (num: number) =>
+      console.log(`Deleted ${num} ${type}`);
+    await posts.deleteMany(deleteFilter).then(logDeleteCount("posts"));
+    await authors.deleteMany(deleteFilter).then(logDeleteCount("authors"));
+    await docs.deleteMany(deleteFilter).then(logDeleteCount("docs"));
+    await docSections
+      .deleteMany(deleteFilter)
+      .then(logDeleteCount("doc sections"));
+  }
+};
+
+await parseFiles(true);
+await parseFiles(false);
